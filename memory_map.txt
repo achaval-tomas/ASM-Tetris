@@ -1,0 +1,196 @@
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+LOAD addresses.o
+LOAD app.o
+LOAD background.o
+LOAD constants.o
+LOAD fixed_point.o
+LOAD line.o
+LOAD particle.o
+LOAD pixel.o
+LOAD rand.o
+LOAD rectangle.o
+LOAD star.o
+LOAD start.o
+LOAD tetris_cell.o
+LOAD time.o
+LOAD util.o
+                0x0000000000080000                . = 0x80000
+
+.text           0x0000000000080000    0x95f84
+ *(.text.boot)
+ .text.boot     0x0000000000080000    0x100c8 start.o
+                0x0000000000080000                _start
+ *(.text*)
+ .text          0x00000000000900c8        0x0 addresses.o
+ .text          0x00000000000900c8     0x2348 app.o
+                0x0000000000090fd8                main
+ .text          0x0000000000092410      0xc58 background.o
+ .text          0x0000000000093068      0x214 constants.o
+ .text          0x000000000009327c        0x0 fixed_point.o
+ .text          0x000000000009327c      0x7a8 line.o
+ *fill*         0x0000000000093a24        0x4 
+ .text          0x0000000000093a28      0xb40 particle.o
+ .text          0x0000000000094568      0x2e8 pixel.o
+ .text          0x0000000000094850       0x38 rand.o
+ .text          0x0000000000094888      0x29c rectangle.o
+ .text          0x0000000000094b24      0x950 star.o
+ .text          0x0000000000095474    0x80000 start.o
+ .text          0x0000000000115474      0xa24 tetris_cell.o
+ .text          0x0000000000115e98       0x28 time.o
+ .text          0x0000000000115ec0       0xc4 util.o
+
+.iplt           0x0000000000115f84        0x0
+ .iplt          0x0000000000115f84        0x0 start.o
+
+.rela.dyn       0x0000000000115f88        0x0
+ .rela.iplt     0x0000000000115f88        0x0 start.o
+ .rela.text.boot
+                0x0000000000115f88        0x0 start.o
+
+.data           0x0000000000115f84        0x0
+ .data          0x0000000000115f84        0x0 addresses.o
+ .data          0x0000000000115f84        0x0 app.o
+ .data          0x0000000000115f84        0x0 background.o
+ .data          0x0000000000115f84        0x0 constants.o
+ .data          0x0000000000115f84        0x0 fixed_point.o
+ .data          0x0000000000115f84        0x0 line.o
+ .data          0x0000000000115f84        0x0 particle.o
+ .data          0x0000000000115f84        0x0 pixel.o
+ .data          0x0000000000115f84        0x0 rand.o
+ .data          0x0000000000115f84        0x0 rectangle.o
+ .data          0x0000000000115f84        0x0 star.o
+ .data          0x0000000000115f84        0x0 start.o
+ .data          0x0000000000115f84        0x0 tetris_cell.o
+ .data          0x0000000000115f84        0x0 time.o
+ .data          0x0000000000115f84        0x0 util.o
+
+.igot.plt       0x0000000000115f88        0x0
+ .igot.plt      0x0000000000115f88        0x0 start.o
+
+.bss            0x0000000000115f84        0x0
+ *(.bss*)
+ .bss           0x0000000000115f84        0x0 addresses.o
+ .bss           0x0000000000115f84        0x0 app.o
+ .bss           0x0000000000115f84        0x0 background.o
+ .bss           0x0000000000115f84        0x0 constants.o
+ .bss           0x0000000000115f84        0x0 fixed_point.o
+ .bss           0x0000000000115f84        0x0 line.o
+ .bss           0x0000000000115f84        0x0 particle.o
+ .bss           0x0000000000115f84        0x0 pixel.o
+ .bss           0x0000000000115f84        0x0 rand.o
+ .bss           0x0000000000115f84        0x0 rectangle.o
+ .bss           0x0000000000115f84        0x0 star.o
+ .bss           0x0000000000115f84        0x0 start.o
+ .bss           0x0000000000115f84        0x0 tetris_cell.o
+ .bss           0x0000000000115f84        0x0 time.o
+ .bss           0x0000000000115f84        0x0 util.o
+
+.bss            0x0000000000115f84        0xc
+                0x0000000000115f90                . = ALIGN (0x10)
+ *fill*         0x0000000000115f84        0xc 
+                0x0000000000115f90                __bss_start = .
+ *(.bss .bss.*)
+ *(COMMON)
+                0x0000000000115f90                __bss_end = .
+                0x0000000000115f90                _end = .
+                0x0000000000000000                __bss_size = ((__bss_end - __bss_start) >> 0x3)
+OUTPUT(kernel8.elf elf64-littleaarch64)
+LOAD linker stubs
+
+.debug_line     0x0000000000000000     0x188b
+ .debug_line    0x0000000000000000      0x979 app.o
+ .debug_line    0x0000000000000979      0x35b background.o
+ .debug_line    0x0000000000000cd4      0x1c8 line.o
+ .debug_line    0x0000000000000e9c      0x2f8 particle.o
+ .debug_line    0x0000000000001194       0x71 pixel.o
+ .debug_line    0x0000000000001205       0x45 rand.o
+ .debug_line    0x000000000000124a       0x62 rectangle.o
+ .debug_line    0x00000000000012ac      0x241 star.o
+ .debug_line    0x00000000000014ed       0x53 start.o
+ .debug_line    0x0000000000001540      0x299 tetris_cell.o
+ .debug_line    0x00000000000017d9       0x42 time.o
+ .debug_line    0x000000000000181b       0x70 util.o
+
+.debug_info     0x0000000000000000      0x228
+ .debug_info    0x0000000000000000       0x2e app.o
+ .debug_info    0x000000000000002e       0x2e background.o
+ .debug_info    0x000000000000005c       0x2e line.o
+ .debug_info    0x000000000000008a       0x2e particle.o
+ .debug_info    0x00000000000000b8       0x2e pixel.o
+ .debug_info    0x00000000000000e6       0x2e rand.o
+ .debug_info    0x0000000000000114       0x2e rectangle.o
+ .debug_info    0x0000000000000142       0x2e star.o
+ .debug_info    0x0000000000000170       0x2e start.o
+ .debug_info    0x000000000000019e       0x2e tetris_cell.o
+ .debug_info    0x00000000000001cc       0x2e time.o
+ .debug_info    0x00000000000001fa       0x2e util.o
+
+.debug_abbrev   0x0000000000000000       0xf0
+ .debug_abbrev  0x0000000000000000       0x14 app.o
+ .debug_abbrev  0x0000000000000014       0x14 background.o
+ .debug_abbrev  0x0000000000000028       0x14 line.o
+ .debug_abbrev  0x000000000000003c       0x14 particle.o
+ .debug_abbrev  0x0000000000000050       0x14 pixel.o
+ .debug_abbrev  0x0000000000000064       0x14 rand.o
+ .debug_abbrev  0x0000000000000078       0x14 rectangle.o
+ .debug_abbrev  0x000000000000008c       0x14 star.o
+ .debug_abbrev  0x00000000000000a0       0x14 start.o
+ .debug_abbrev  0x00000000000000b4       0x14 tetris_cell.o
+ .debug_abbrev  0x00000000000000c8       0x14 time.o
+ .debug_abbrev  0x00000000000000dc       0x14 util.o
+
+.debug_aranges  0x0000000000000000      0x240
+ .debug_aranges
+                0x0000000000000000       0x30 app.o
+ .debug_aranges
+                0x0000000000000030       0x30 background.o
+ .debug_aranges
+                0x0000000000000060       0x30 line.o
+ .debug_aranges
+                0x0000000000000090       0x30 particle.o
+ .debug_aranges
+                0x00000000000000c0       0x30 pixel.o
+ .debug_aranges
+                0x00000000000000f0       0x30 rand.o
+ .debug_aranges
+                0x0000000000000120       0x30 rectangle.o
+ .debug_aranges
+                0x0000000000000150       0x30 star.o
+ .debug_aranges
+                0x0000000000000180       0x30 start.o
+ .debug_aranges
+                0x00000000000001b0       0x30 tetris_cell.o
+ .debug_aranges
+                0x00000000000001e0       0x30 time.o
+ .debug_aranges
+                0x0000000000000210       0x30 util.o
+
+.debug_str      0x0000000000000000       0x98
+ .debug_str     0x0000000000000000       0x68 app.o
+ .debug_str     0x0000000000000068        0x9 background.o
+                                         0x68 (size before relaxing)
+ .debug_str     0x0000000000000071        0xa line.o
+                                         0x69 (size before relaxing)
+ .debug_str     0x000000000000007b       0x68 particle.o
+ .debug_str     0x000000000000007b        0xa pixel.o
+                                         0x67 (size before relaxing)
+ .debug_str     0x000000000000007b        0xa rand.o
+                                         0x66 (size before relaxing)
+ .debug_str     0x000000000000007b        0xa rectangle.o
+                                         0x6b (size before relaxing)
+ .debug_str     0x000000000000007b       0x69 star.o
+ .debug_str     0x000000000000007b        0x8 start.o
+                                         0x67 (size before relaxing)
+ .debug_str     0x0000000000000083        0xe tetris_cell.o
+                                         0x6d (size before relaxing)
+ .debug_str     0x0000000000000091        0xe time.o
+                                         0x66 (size before relaxing)
+ .debug_str     0x0000000000000091        0x7 util.o
+                                         0x66 (size before relaxing)
