@@ -1,7 +1,8 @@
 # ASM-Tetris
-Full Tetris game created in ASM emulated in a raspberry pi 3b with QEMU. This project was created with 2 of my CS classmates.
+This project was created with 2 of my CS classmates as an assignment for the subject Computer Organization. 
+Full Tetris game created in ASM emulated in a raspberry pi 3b with QEMU.
 
-Run with $make runSGPIOM in one terminal and $make runQEMU in a different one.
+Play with $make runSGPIOM in one terminal and $make runQEMU in a different one.
 
 Rotate     - W
 Move Right - D
