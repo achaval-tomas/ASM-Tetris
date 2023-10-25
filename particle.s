@@ -15,8 +15,9 @@ PARTICLE_S:
         .equ PS_POS_Y,          PS_POS_X + 8            // u64
         .equ PS_SIZE,           PS_POS_Y + 8            // u64
         .equ PS_PHASE,          PS_SIZE + 8             // u64 (Q32)
+        .equ PS_FREQUENCY,      PS_PHASE + 8            // u64 (Q32)
 
-        .equ STRUCT_PS_SIZE,    PS_PHASE + 8
+        .equ STRUCT_PS_SIZE,    PS_FREQUENCY + 8
 
 /* struct ParticleManager */
         .equ PM_PARTICLE_ARRAY,         0                                                       // struct ParticleState[MAX_PARTICLES]
@@ -50,6 +51,7 @@ particle_manager_init:
  *      x3: u64                                 <- size
  *      w4: u32                                 <- color
  *      x5: u64                                 <- phase (Q32)
+ *      x6: u64                                 <- frequency (Q32)
  */
 particle_manager_create_star:
         stp     lr, x19, [sp, -16]!
@@ -73,6 +75,7 @@ particle_manager_create_star:
         str     x3, [x10, PS_SIZE]
         str     w4, [x10, PS_COLOR]
         str     x5, [x10, PS_PHASE]
+        str     x6, [x10, PS_FREQUENCY]
 
         bl      get_time
         str     w0, [x10, PS_TIMESTAMP]
@@ -140,7 +143,7 @@ particle_draw:
         udiv    x0, x0, x9              // x0 <- time in seconds        (Q32)
 
         orr     x1, xzr, 4 << 32        // x1 <- amplitude
-        orr     x2, xzr, 1 << 31        // x2 <- frequency
+        ldr     x2, [x20, PS_FREQUENCY] // x2 <- frequency
         ldr     x3, [x20, PS_PHASE]     // x3 <- phase
         bl      sine_wave_advanced
 

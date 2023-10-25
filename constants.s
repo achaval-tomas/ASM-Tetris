@@ -40,6 +40,8 @@ CONSTANTS_S:
         .equ FRAME_SPECULAR_COLOR,      0xFF999999
         .equ FRAME_AMBIENT_COLOR,       0xFF333333
 
+        .equ GHOST_TETROMINO_ALPHA_MULTIPLIER,  0x80
+
 
 
 /* Data for all 7 tetrominos */
@@ -47,9 +49,9 @@ CONSTANTS_S:
 /* Data is mirrored both horizontally and vertically, due to endianness and array indexing respectively */
 TETROMINOS:
 /* Tetromino I: */
-        .word 0x00CCCC  // Diffuse color
-        .word 0x00FFFF  // Specular color
-        .word 0x009999  // Ambient color
+        .word 0xFF00CCCC  // Diffuse color
+        .word 0xFF00FFFF  // Specular color
+        .word 0xFF009999  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -73,9 +75,9 @@ TETROMINOS:
 
 
 /* Tetromino J: */
-        .word 0x0000CC  // Diffuse color
-        .word 0x0000FF  // Specular color
-        .word 0x000099  // Ambient color
+        .word 0xFF0000CC  // Diffuse color
+        .word 0xFF0000FF  // Specular color
+        .word 0xFF000099  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -98,9 +100,9 @@ TETROMINOS:
         .word 0x00FFFF00
 
 /* Tetromino L: */
-        .word 0xCC6600  // Diffuse color
-        .word 0xFF8800  // Specular color
-        .word 0x994400  // Ambient color
+        .word 0xFFCC6600  // Diffuse color
+        .word 0xFFFF8800  // Specular color
+        .word 0xFF994400  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -123,9 +125,9 @@ TETROMINOS:
         .word 0x0000FF00
 
 /* Tetromino O: */
-        .word 0xCCCC00  // Diffuse color
-        .word 0xFFFF00  // Specular color
-        .word 0x999900  // Ambient color
+        .word 0xFFCCCC00  // Diffuse color
+        .word 0xFFFFFF00  // Specular color
+        .word 0xFF999900  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -148,9 +150,9 @@ TETROMINOS:
         .word 0x00FFFF00
 
 /* Tetromino S: */
-        .word 0x00CC00  // Diffuse color
-        .word 0x00FF00  // Specular color
-        .word 0x009900  // Ambient color
+        .word 0xFF00CC00  // Diffuse color
+        .word 0xFF00FF00  // Specular color
+        .word 0xFF009900  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -173,9 +175,9 @@ TETROMINOS:
         .word 0x0000FF00
 
 /* Tetromino Z: */
-        .word 0xCC0000  // Diffuse color
-        .word 0xFF0000  // Specular color
-        .word 0x990000  // Ambient color
+        .word 0xFFCC0000  // Diffuse color
+        .word 0xFFFF0000  // Specular color
+        .word 0xFF990000  // Ambient color
 
         .word 0x00000000
         .word 0x00000000
@@ -198,9 +200,9 @@ TETROMINOS:
         .word 0x00FF0000
 
 /* Tetromino T: */
-        .word 0x9900CC  // Diffuse color
-        .word 0xCC00FF  // Specular color
-        .word 0x660099  // Ambient color
+        .word 0xFF9900CC  // Diffuse color
+        .word 0xFFCC00FF  // Specular color
+        .word 0xFF660099  // Ambient color
 
         .word 0x00000000
         .word 0x00000000

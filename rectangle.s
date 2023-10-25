@@ -2,6 +2,7 @@
 RECTANGLE_S:
 
         .include "./constants.s"
+        .include "./pixel.s"
 
 
 /*
@@ -11,11 +12,13 @@ RECTANGLE_S:
  *      x2: top right x coordinate         (left) 0 <= x < SCREEN_WIDTH (right)
  *      x3: top right y coordinate       (bottom) 0 <= y < SCREEN_HEIGHT (top)
  *      x4: beginning of framebuffer
- *      w5: color
+ *      w5: argb color
  */
 draw_filled_rectangle:
-        stp     lr, x19, [sp, -32]!
+        stp     lr, x19, [sp, -64]!
         stp     x20, x21, [sp, 16]
+        stp     x22, x23, [sp, 32]
+        stp     x24, x25, [sp, 48]
 
         // TODO: check bounds?
 
@@ -33,27 +36,38 @@ draw_filled_rectangle:
         sub     x20, x20, x19                   // x20 = pixels between the end of a row and the beginning of the next row
         lsl     x20, x20, BYTES_PER_PIXEL_SHIFT // x20 = bytes between the end of a row and the beginning of the next row
 
+        mov     x22, x1
+        mov     x23, x3
+
+        mov     w24, w5
+        mov     x25, x4
+
 
 draw_filled_rectangle__next_row:
         mov     x21, x19                        // x19 = rectangle width
 
 draw_filled_rectangle__next_col:
-        str     w5, [x4]                        // Paint pixel
-        add     x4, x4, BYTES_PER_PIXEL         // Advance to next pixel
+        // Paint pixel
+        mov     w0, w24
+        mov     x1, x25
+        bl      draw_argb_pixel
+
+        add     x25, x25, BYTES_PER_PIXEL       // Advance to next pixel
 
         subs    x21, x21, 1                     // Check if we finished current row
         b.gt    draw_filled_rectangle__next_col // If not, then draw next column
 
 
-
-        add     x4, x4, x20                     // Advance to beginning of next row
-        add     x1, x1, 1
-        cmp     x1, x3
+        add     x25, x25, x20                   // Advance to beginning of next row
+        add     x22, x22, 1
+        cmp     x22, x23
         b.le    draw_filled_rectangle__next_row
 
 
+        ldp     x24, x25, [sp, 48]
+        ldp     x22, x23, [sp, 32]
         ldp     x20, x21, [sp, 16]
-        ldp     lr, x19, [sp], 32
+        ldp     lr, x19, [sp], 64
         ret
 
 

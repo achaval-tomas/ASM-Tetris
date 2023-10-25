@@ -1,0 +1,11 @@
+*.o
+memory_map.txt
+kernel8.list
+kernel8.img
+kernel8.elf
+.gdb_history
+thick_digits.txt
+digits.pdn
+digits2.pdn
+blocks.pdn
+cannon.pdn

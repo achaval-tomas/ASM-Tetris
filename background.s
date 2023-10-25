@@ -57,6 +57,11 @@ create_background_starfield__next_star:
         bl      rand_gen_in_range
         lsl     x27, x0, 24     // x27 <- star alpha
 
+        mov     w0, (1 << 6)
+        mov     w1, (1 << 8)
+        bl      rand_gen_in_range
+        lsl     x6, x0, 24     // x6 <- star frequency (Q32)
+
         mov     x0, x19
 
         mov     x9, BACKGROUND_STAR_SECTION_SIZE

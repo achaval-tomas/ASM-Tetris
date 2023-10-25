@@ -5,16 +5,16 @@
         .include "./line.s"
         .include "./rectangle.s"
         .include "./tetris_cell.s"
+        .include "./triangle.s"
         .include "./particle.s"
         .include "./util.s"
         .include "./rand.s"
         .include "./background.s"
 
+        .equ MOVEMENT_PER_STEP,         16
 
-        /* Choose a different BOARD_WIDTH and/or BOARD_HEIGHT to play tetris of any size! */
-        .equ BOARD_WIDTH,               10  // Original is 10, minimum 4.
-        .equ BOARD_HEIGHT,              20  // Original is 20, minimum 4.
-
+        .equ BOARD_WIDTH,               10
+        .equ BOARD_HEIGHT,              20
         .equ BOARD_SIZE,                BOARD_WIDTH * BOARD_HEIGHT
         .equ BOARD_SIZE_IN_BYTES,       BOARD_SIZE * 1
 
@@ -26,7 +26,6 @@
         .equ MS_PER_TICK,               1000 / TICKS_PER_SECOND         // unused
         .equ US_PER_TICK,               1000000 / TICKS_PER_SECOND
 
-        .equ MOVEMENT_PER_STEP,         16
 
         .equ MS_PER_DROP,               400
         .equ US_PER_AUTO_DROP,          MS_PER_DROP * 1000
@@ -73,7 +72,8 @@
         .equ COLLISION_RESULT_EXISTING_BLOCK,   0b10
 
 /* struct GameState */
-        .equ LAST_TICK,                 0                                               // u32
+        .equ IS_PAUSED,                 0                                               // bool (u64)
+        .equ LAST_TICK,                 IS_PAUSED + 8                                   // u32
         .equ LAST_DROP,                 LAST_TICK + 4                                   // u32
         .equ TICK_COUNTER,              LAST_DROP + 4                                   // u64
         .equ GAME_STATS,                TICK_COUNTER + 8                                // struct GameStats
@@ -190,10 +190,9 @@ main:
         // Allocate and init struct GameState
         mov     x9, STRUCT_GAME_STATE_SIZE
         sub     sp, sp, x9
-restart:
+
         mov     x0, sp
         bl      init_game_state
-
 
         add     x0, sp, PARTICLE_MANAGER
         bl      create_background_starfield
@@ -210,27 +209,21 @@ game_loop:
         add     x0, sp, INPUT_STATE
         bl      read_input
 
-        add     x0, sp, INPUT_STATE
-        add     x1, sp, TETROMINO_STATE
-        add     x2, sp, BOARD_STATE
+        mov     x0, sp
         bl      process_input
+
+        ldr     x9, [sp, IS_PAUSED]
+        cbnz    x9, game_loop__dont_update
 
         mov     x0, sp
         mov     x1, x28
         bl      tetromino_fall
-        cbz     x0, game_loop__keep_tetromino
-        /* We have just placed a tetromino, and we need to get a new one */
 
-
-        add     x0, sp, TETROMINO_STATE
-        bl      init_tetromino_state
-
-        add     x0, sp, CHOOSER_BAG_STATE
-        bl      choose_next_tetromino
-
-        sturb   w0, [sp, TETROMINO_STATE + TSTATE_ID]  // Start with new tetromino.
-game_loop__keep_tetromino:
-
+        cbnz    x0, game_loop__not_game_over
+        mov     x9, 1
+        str     x9, [sp, IS_PAUSED]
+game_loop__not_game_over:
+game_loop__dont_update:
 
         mov     x0, x28
         bl      draw_canvas
@@ -248,6 +241,20 @@ game_loop__keep_tetromino:
         add     x3, sp, TETROMINO_STATE
         mov     x4, x28
         bl      draw_board
+
+        mov     x0, 64
+        mov     x1, 64
+        ldr     w2, =0x3FDDDDDD
+        ldr     w3, =0x3FFFFFFF
+        ldr     w4, =0x3F999999
+        ldr     x9, [sp, TETROMINO_STATE + TSTATE_ID]
+        mov     x10, STRUCT_TETROMINO_SIZE
+        mul     x9, x9, x10
+        add     x9, x9, TETROMINO_ROTS
+        ldr     x10, =TETROMINOS
+        add     x5, x9, x10
+        mov     x6, x28
+        bl      draw_tetromino_by_colors_at
 
 
         mov     x0, (SCREEN_WIDTH - 1)
@@ -286,18 +293,6 @@ game_loop__sleep:
         add     x0, x0, 1
         str     x0, [sp, TICK_COUNTER]
         b game_loop
-
-
-game_over:
-        add             x0, sp, INPUT_STATE
-        bl              read_input
-        
-	add		x0, sp, INPUT_STATE
-	ldr		w0, [x0, ON_PRESS_STATE]
-	add		x1, sp, TETROMINO_STATE
-	bl		handle_space
-
-	b		game_over
 
 
 
@@ -359,6 +354,8 @@ init_game_state:
         stp     lr, x19, [sp, -16]!
 
         mov     x19, x0                 // x19 <- game_state
+
+        str     xzr, [x19, IS_PAUSED]
 
         bl      get_time
         str     w0, [x19, LAST_TICK]
@@ -546,6 +543,22 @@ draw_board_inner:
         mov     x23, x3         // x23 <- tetromino state
         mov     x24, x4         // x24 <- framebuffer
 
+        // Copy tetromino state for ghost
+        sub     sp, sp, STRUCT_TSTATE_SIZE
+        mov     x27, sp
+        ldr     x9, [x23, TSTATE_ID]
+        str     x9, [x27, TSTATE_ID]
+        ldr     x9, [x23, TSTATE_ROT]
+        str     x9, [x27, TSTATE_ROT]
+        ldr     x9, [x23, TSTATE_POS_X]
+        str     x9, [x27, TSTATE_POS_X]
+        ldr     x9, [x23, TSTATE_POS_Y]
+        str     x9, [x27, TSTATE_POS_Y]
+
+        mov     x0, x27
+        mov     x1, x2
+        bl      move_tetromino_to_bottom        // Move ghost to bottom position
+
 
         mov     x26, 0          // x26 <- row iterator
 
@@ -553,23 +566,43 @@ draw_board_inner__next_row:
         mov     x25, 0          // x25 <- column iterator
 
 draw_board_inner__next_col:
+        /* w19 <- cell alpha */
+
+        mov     x0, x25
+        mov     x1, x26
+        mov     x2, x23
+        bl      get_tetromino_cell_at
+        mov     w19, 0xFF
+        cbnz    x0, draw_board_inner__draw_cell
+
+        mov     x0, x25
+        mov     x1, x26
+        mov     x2, x27
+        bl      get_tetromino_cell_at
+        mov     w19, GHOST_TETROMINO_ALPHA_MULTIPLIER
+        cbnz    x0, draw_board_inner__draw_cell
+
         mov     x0, x25
         mov     x1, x26
         mov     x2, x22
-        mov     x3, x23
-        bl      get_cell_id_with_tetromino_at
-        cbz     x0, draw_board_inner__skip_cell       // skip if cell is air
-        sub     x0, x0, TETROMINO_ID_BIAS       // x0 <- normalized cell id
+        bl      get_board_cell_at
+        mov     w19, 0xFF
+        cbnz    x0, draw_board_inner__draw_cell
 
+        b       draw_board_inner__skip_cell
+
+draw_board_inner__draw_cell:
+        sub     x0, x0, TETROMINO_ID_BIAS       // x0 <- normalized cell id
         bl      get_tetromino_by_index
-        mov     x2, x0                          // x2: in struct Tetromino* <- current tetromino
+        mov     x3, x0                          // x3: in struct Tetromino* <- current tetromino
 
         mov     x9, TETRIS_CELL_SIZE
         mul     x0, x9, x25     // x0 <- x offset in coords to current cell
         add     x0, x20, x0     // x0 <- bottom left x of current cell
         mul     x1, x9, x26     // x1 <- y offset in coords to current cell
         add     x1, x21, x1     // x1 <- bottom left y of current cell
-        mov     x3, x24
+        mov     w2, w19         // w2 <- cell alpha
+        mov     x4, x24
         bl      draw_tetris_cell
 
 draw_board_inner__skip_cell:
@@ -583,6 +616,7 @@ draw_board_inner__skip_cell:
         b.lt    draw_board_inner__next_row
         /* We finished drawing inner board */
 
+        add     sp, sp, STRUCT_TSTATE_SIZE
 
         ldp     x26, x27, [sp, 64]
         ldp     x24, x25, [sp, 48]
@@ -700,39 +734,15 @@ get_cell_id_with_tetromino_at:
         mov     x22, x2                 // x22 <- board state
         mov     x23, x3                 // x23 <- tetromino state
 
-        ldr     x24, [x3, TSTATE_POS_X] // x24 <- tetromino x
-        ldr     x25, [x3, TSTATE_POS_Y] // x25 <- tetromino y
 
-        sub     x24, x0, x24            // x24 <- tetromino x relative to cell x
-        cmp     x24, 0
-        b.lt    get_cell_id_with_tetromino_at__not_tetromino
-        cmp     x24, TETROMINO_BOARD_WIDTH
-        b.ge    get_cell_id_with_tetromino_at__not_tetromino
+        mov     x0, x20
+        mov     x1, x21
+        mov     x2, x23
+        bl      get_tetromino_cell_at
+        cbnz    x0, get_cell_id_with_tetromino_at__end
 
-        sub     x25, x1, x25            // x25 <- tetromino y relative to cell y
-        cmp     x25, 0
-        b.lt    get_cell_id_with_tetromino_at__not_tetromino
-        cmp     x25, TETROMINO_BOARD_HEIGHT
-        b.ge    get_cell_id_with_tetromino_at__not_tetromino
+        /* Current cell is not tetromino, check board */
 
-        /* Current cell is inside tetromino matrix, we should check that first */
-
-        mov     x0, x3
-        bl      get_tetromino           // x0 <- tetromino data of current tetromino's rotation
-
-        mov     x2, x0                  // x2 <- current tetromino data
-        mov     x0, x24                 // x0 <- tetromino x in tetromino board
-        mov     x1, x25                 // x1 <- tetromino y in tetromino board
-        bl      is_tetromino_cell_air
-        cbnz    x0, get_cell_id_with_tetromino_at__not_tetromino
-
-        /* Current cell belongs to tetromino */
-        ldr     x0, [x23, TSTATE_ID]            // x0 <- cell id without bias
-        add     x0, x0, TETROMINO_ID_BIAS       // x0 <- cell id with bias
-        b       get_cell_id_with_tetromino_at__end
-
-
-get_cell_id_with_tetromino_at__not_tetromino:
         mov     x9, BOARD_WIDTH
         mul     x9, x21, x9
         add     x9, x9, x20
@@ -749,6 +759,83 @@ get_cell_id_with_tetromino_at__end:
         ldp     x22, x23, [sp, 32]
         ldp     x20, x21, [sp, 16]
         ldp     lr, x19, [sp], 80
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: u64                         <- x coordinate 0 <= x < BOARD_WIDTH
+ *      x1: u64                         <- y coordinate 0 <= y < BOARD_HEIGHT
+ *      x2: in struct BoardState*       <- board state
+ * Returns:
+ *      x0: u64                         <- 0 or tetromino id + TETROMINO_ID_BIAS
+ */
+get_board_cell_at:
+        stp     lr, x19, [sp, -16]!
+
+        mov     x9, BOARD_WIDTH
+        mul     x9, x9, x1
+        add     x9, x9, x0
+        add     x9, x9, BSTATE_BOARD
+        add     x9, x2, x9
+        ldrb    w0, [x9]
+
+        ldp     lr, x19, [sp], 16
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: i64                         <- x coordinate
+ *      x1: i64                         <- y coordinate
+ *      x2: in struct TetrominoState*   <- tetromino state
+ * Returns:
+ *      x0: u64                         <- 0 or tetromino id + TETROMINO_ID_BIAS
+ */
+get_tetromino_cell_at:
+        stp     lr, x19, [sp, -32]!
+        stp     x20, x21, [sp, 16]
+
+        mov     x19, x2
+
+        ldr     x20, [x19, TSTATE_POS_X] // x20 <- global tetromino x
+        ldr     x21, [x19, TSTATE_POS_Y] // x21 <- global tetromino y
+
+        sub     x20, x0, x20    // x20 <- local tetromino x
+        sub     x21, x1, x21    // x21 <- local tetromino y
+
+        // Check that 0 <= x < TETROMINO_BOARD_WIDTH
+        cmp     x20, TETROMINO_BOARD_WIDTH
+        b.hs    get_tetromino_cell_at__air
+
+        // Check that 0 <= y < TETROMINO_BOARD_HEIGHT
+        cmp     x21, TETROMINO_BOARD_HEIGHT
+        b.hs    get_tetromino_cell_at__air
+
+        /* (x, y) is inside tetromino matrix */
+
+        mov     x0, x19
+        bl      get_tetromino
+
+        mov     x9, TETROMINO_BOARD_WIDTH
+        mul     x9, x9, x21
+        add     x9, x9, x20
+        add     x9, x0, x9
+        ldrb    w9, [x9]
+        cbz     x9, get_tetromino_cell_at__air
+
+        ldr     x0, [x19, TSTATE_ID]
+        add     x0, x0, TETROMINO_ID_BIAS
+        b       get_tetromino_cell_at__end
+
+get_tetromino_cell_at__air:
+        mov     x0, 0
+
+get_tetromino_cell_at__end:
+        ldp     x20, x21, [sp, 16]
+        ldp     lr, x19, [sp], 32
         ret
 
 
@@ -886,16 +973,21 @@ draw_destroy_particles__loop:
         mov     x0, x20
         bl      get_elapsed_time
         lsl     x0, x0, 5
-        ldr     w2, =US_PER_AUTO_DROP
+        ldr     x2, =US_PER_AUTO_DROP
         udiv    x4, x0, x2
         mov     x5, 1
         lsl     x5, x5, 5
         sub     x5, x5, x4
         mov     x0, DESTROY_PARTICLE_RADIUS
         mul     x2, x5, x0
-        lsr     x2, x2, 5
+        asr     x2, x2, 5
         mov     x10, x2
         mov     x25, x2
+
+        /*
+        cmp x10, 0
+        b.le draw_destroy_particles__destroy
+        */
 
 
         mov     x2, 50
@@ -934,6 +1026,13 @@ draw_destroy_particles__loop:
         cbnz    x2, draw_destroy_particles__loop
         b       draw_destroy_particles__end
 
+draw_destroy_particles__destroy:
+        /*
+        mov x0, x24
+        add x0, x0, BOARD_STATE + BSTATE_DESTROYED_ROWS
+        movz x1, 0xff, lsl 00
+        sturb w1, [x0]
+        */
 
 draw_destroy_particles__end:
 
@@ -979,39 +1078,53 @@ read_input:
 
 /*
  * Params:
- *      x0: const struct InputState*
- *      x1: mut struct TetrominoState*
- *      x2: const struct BoardState*      // Para chequear colision en los handle (MEJORARLO)
+ *      x0: in/out struct GameState*
  */
 process_input:
         stp     lr, x19, [sp, -32]!
         stp     x20, x21, [sp, 16]
 
-        mov     x19, x0         // x19 = const struct InputState*
-        mov     x20, x1         // x20 = mut struct TetrominoState*
-        mov 	x21, x2         // x21 = const struct BoardState*
+        ldr     x19, [x0, INPUT_STATE + ON_PRESS_STATE] // x19 <- on press flags
+        mov     x20, x0                                 // x20 <- in/out struct GameState*
 
-        ldr     w0, [x19, ON_PRESS_STATE]
-        mov     x1, x20
+        ldr     x9, [x0, IS_PAUSED]
+        cbnz    x9, process_input__end_d
+
+        tst     x19, GPIO_W
+        b.eq    process_input__end_w
+        add     x0, x20, TETROMINO_STATE
+        add     x1, x20, BOARD_STATE
         bl      handle_w
+process_input__end_w:
 
-        ldr     w0, [x19, ON_PRESS_STATE]
-        mov     x1, x20
+        tst     x19, GPIO_A
+        b.eq    process_input__end_a
+        add     x0, x20, TETROMINO_STATE
+        add     x1, x20, BOARD_STATE
         bl      handle_a
+process_input__end_a:
 
-        ldr     w0, [x19, ON_PRESS_STATE]
-        mov     x1, x20
+        tst     x19, GPIO_S
+        b.eq    process_input__end_s
+        add     x0, x20, TETROMINO_STATE
+        add     x1, x20, BOARD_STATE
+        add     x2, x20, LAST_DROP
         bl      handle_s
+process_input__end_s:
 
-        ldr     w0, [x19, ON_PRESS_STATE]
-        mov     x1, x20
+        tst     x19, GPIO_D
+        b.eq    process_input__end_d
+        add     x0, x20, TETROMINO_STATE
+        add     x1, x20, BOARD_STATE
         bl      handle_d
+process_input__end_d:
 
-        ldr     w0, [x19, ON_PRESS_STATE]
-        mov     x1, x20
+        tst     x19, GPIO_SPACE
+        b.eq    process_input__end_space
+        add     x0, x20, IS_PAUSED
+        add     x1, x20, TETROMINO_STATE
         bl      handle_space
-
-
+process_input__end_space:
 
         ldp     x20, x21, [sp, 16]
         ldp     lr, x19, [sp], 32
@@ -1021,9 +1134,8 @@ process_input:
 
 /*
  * Params:
- *      x0: u32 (on press flags)
- *      x1: mut struct TetrominoState*
- *	x2: in struct BoardState*
+ *      x0: mut struct TetrominoState*
+ *	x1: in struct BoardState*
  */
 handle_w:
         sub     sp, sp, 32
@@ -1032,27 +1144,20 @@ handle_w:
         stur    x20, [sp, 16]
         stur    x21, [sp, 24]
 
-        and     x19, x0, GPIO_W
-        cbz     x19, handle_w__end
+        mov     x20, x0         // x20 <- tetromino state
+        mov     x21, x1         // x21 <- board state
 
-        mov     x20, x1
+        ldur    x9, [x20, TSTATE_ROT]
+        mov     x19, x9                 // x19 <- old rotation (in case new one fails)
+        add     x9, x9, 1
+        and     x9, x9, 0b11            // x9 = x9 mod 4
+        stur    x9, [x20, TSTATE_ROT]   // Save new rotation
 
-        mov     x0, x1
-        mov     x1, x2
-
-        ldur    x19, [x20, TSTATE_ROT]
-        mov     x21, x19
-        add     x19, x19, 1
-        cmp     x19, 4
-        b.ne    handle_w__rot_ok
-        mov     x19, 0
-handle_w__rot_ok:
-        stur    x19, [x20, TSTATE_ROT]
-
+        mov     x0, x20
+        mov     x1, x21
         bl      check_collision
         cbz     x0, handle_w__end
-
-        stur    x21, [x20, TSTATE_ROT]
+        stur    x19, [x20, TSTATE_ROT]  // New rotation failed collision, restore old rotation
 
 handle_w__end:
         ldur    lr, [sp]
@@ -1066,9 +1171,9 @@ handle_w__end:
 
 /*
  * Params:
- *      x0: u32 (on press flags)
- *      x1: mut struct TetrominoState*
- *	x2: in struct BoardState*
+ *      x0: mut struct TetrominoState*
+ *	x1: in struct BoardState*
+ *      x2: out u32*                    <- last drop
  */
 handle_s:
         sub     sp, sp, 40
@@ -1078,30 +1183,21 @@ handle_s:
         stur    x21, [sp, 24]
         stur    x22, [sp, 32]
 
-        and     x19, x0, GPIO_S
-        cbz     x19, handle_s__end
+        mov     x20, x0         // x20 <- tetromino state
+        mov     x21, x1         // x21 <- board state
+        mov     x22, x2         // x22 <- last drop
 
-        mov     x20, x1
+        ldr     x0, [x20, TSTATE_POS_X]
+        ldr     x1, [x20, TSTATE_POS_Y]
+        sub     x1, x1, 1
+        mov     x2, x20
+        mov     x3, x21
+        bl      try_move_tetromino
+        cbz     x0, handle_s__end
+        /* Successfully moved down */
 
-        mov     x0, x1
-        mov     x1, x2
-
-handle_s__loop:
-        ldur    x19, [x20, TSTATE_POS_Y]
-        sub     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_Y]
-
-        mov     x21, x0
-        mov     x22, x1
-        bl      check_collision
-        mov     x2, x0
-        mov     x0, x21
-        mov     x1, x22
-        cbz     x2, handle_s__loop
-
-        ldur    x19, [x20, TSTATE_POS_Y]
-        add     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_Y]
+        bl      get_time
+        str     w0, [x22]
 
 handle_s__end:
         ldur    lr, [sp]
@@ -1116,9 +1212,8 @@ handle_s__end:
 
 /*
  * Params:
- *      x0: u32 (on press flags)
- *      x1: mut struct TetrominoState*
- *	x2: const struct BoardState*
+ *      x0: mut struct TetrominoState*
+ *	x1: const struct BoardState*
  */
 handle_a:
         sub     sp, sp, 24
@@ -1126,26 +1221,16 @@ handle_a:
         stur    x19, [sp, 8]
         stur    x20, [sp, 16]
 
-        and     x19, x0, GPIO_A
-        cbz     x19, handle_a__end
+        mov     x20, x0         // x20 <- tetromino state
+        mov     x21, x1         // x21 <- board state
 
-        mov     x20, x1
+        ldr     x0, [x20, TSTATE_POS_X]
+        sub     x0, x0, 1
+        ldr     x1, [x20, TSTATE_POS_Y]
+        mov     x2, x20
+        mov     x3, x21
+        bl      try_move_tetromino
 
-        mov     x0, x1
-        mov     x1, x2
-
-        ldur    x19, [x20, TSTATE_POS_X]
-        sub     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_X]
-
-        bl      check_collision
-        cbz     x0, handle_a__end
-
-        ldur    x19, [x20, TSTATE_POS_X]
-        add     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_X]
-
-handle_a__end:
         ldur    lr, [sp]
         ldur    x19, [sp, 8]
         ldur    x20, [sp, 16]
@@ -1156,9 +1241,8 @@ handle_a__end:
 
 /*
  * Params:
- *      x0: u32 (on press flags)
- *      x1: mut struct TetrominoState*
- *	x2: const struct BoardState*
+ *      x0: mut struct TetrominoState*
+ *	x1: const struct BoardState*
  */
 handle_d:
         sub     sp, sp, 24
@@ -1166,26 +1250,16 @@ handle_d:
         stur    x19, [sp, 8]
         stur    x20, [sp, 16]
 
-        and     x19, x0, GPIO_D
-        cbz     x19, handle_d__end
+        mov     x20, x0         // x20 <- tetromino state
+        mov     x21, x1         // x21 <- board state
 
-        mov     x20, x1
+        ldr     x0, [x20, TSTATE_POS_X]
+        add     x0, x0, 1
+        ldr     x1, [x20, TSTATE_POS_Y]
+        mov     x2, x20
+        mov     x3, x21
+        bl      try_move_tetromino
 
-        mov     x0, x1
-        mov     x1, x2
-
-        ldur    x19, [x20, TSTATE_POS_X]
-        add     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_X]
-
-        bl      check_collision
-        cbz     x0, handle_d__end
-
-        ldur    x19, [x20, TSTATE_POS_X]
-        sub     x19, x19, 1
-        stur    x19, [x20, TSTATE_POS_X]
-
-handle_d__end:
         ldur    lr, [sp]
         ldur    x19, [sp, 8]
         ldur    x20, [sp, 16]
@@ -1196,17 +1270,22 @@ handle_d__end:
 
 /*
  * Params:
- *      x0: u32 (on press flags)
- *      x1: mut struct TetrominoState*
-*/
+ *      x0: in/out struct GameState*            <- game state
+ */
 handle_space:
         stp     lr, x19, [sp, -16]!
 
-        and     x19, x0, GPIO_SPACE
-        cbz     x19, handle_space__end
+        ldr     x9, [x0, IS_PAUSED]
+        cbz     x9, handle_space__pause_game
+        cbnz    x9, handle_space__restart_game
 
-        sub     sp, x1, TETROMINO_STATE
-        b       restart
+handle_space__pause_game:
+        bl      do_hard_drop
+        b       handle_space__end
+
+handle_space__restart_game:
+        bl      restart_game
+        b       handle_space__end
 
 handle_space__end:
         ldp     lr, x19, [sp], 16
@@ -1216,7 +1295,163 @@ handle_space__end:
 
 /*
  * Params:
- *      x0: struct GameState*   <- game state
+ *      x0: u64                                 <- new x pos
+ *      x1: u64                                 <- new y pos
+ *      x2: in/out struct TetrominoState*       <- tetromino state
+ *      x3: in struct BoardState*               <- board state
+ * Returns:
+ *      x0: bool                <- true if successful, false otherwise
+ */
+try_move_tetromino:
+        stp     lr, x19, [sp, -48]!
+        stp     x20, x21, [sp, 16]
+        stp     x22, x23, [sp, 32]
+
+        mov     x20, x2         // x20 <- tetromino state
+        mov     x21, x3         // x21 <- board state
+
+        ldr     x22, [x20, TSTATE_POS_X]        // x22 <- old x pos
+        ldr     x23, [x20, TSTATE_POS_Y]        // x23 <- old y pos
+
+        // Set new positions
+        str     x0, [x20, TSTATE_POS_X]
+        str     x1, [x20, TSTATE_POS_Y]
+
+        mov     x0, x20
+        mov     x1, x21
+        bl      check_collision
+        cbz     x0, try_move_tetromino__success
+
+        /* Collision failed, revert to old positions */
+        str     x22, [x20, TSTATE_POS_X]
+        str     x23, [x20, TSTATE_POS_Y]
+
+        b try_move_tetromino__failure
+
+
+try_move_tetromino__success:
+        mov     x0, 1
+        b       try_move_tetromino__end
+
+try_move_tetromino__failure:
+        mov     x0, 0
+        b       try_move_tetromino__end
+
+try_move_tetromino__end:
+        ldp     x22, x23, [sp, 32]
+        ldp     x20, x21, [sp, 16]
+        ldp     lr, x19, [sp], 48
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: in/out struct GameState*
+ * Notes:
+ *      May cause game over if it can't spawn a new tetromino
+ */
+do_hard_drop:
+        stp     lr, x19, [sp, -32]!
+        stp     x20, x21, [sp, 16]
+
+        mov     x19, x0                 // x19 <- game state
+
+        add     x0, x19, TETROMINO_STATE
+        add     x1, x19, BOARD_STATE
+        bl      move_tetromino_to_bottom
+
+        /* Tetromino is at its lowest possible position, time to place it */
+
+        add     x0, x19, TETROMINO_STATE
+        add     x1, x19, BOARD_STATE
+        bl      try_place_tetromino_and_update
+        cbnz    x0, do_hard_drop__end
+
+        /* Failed to place the tetromino or couldn't successfully spawn another one, game over */
+
+        mov     x9, 1
+        str     x9, [x19, IS_PAUSED]
+
+do_hard_drop__end:
+        ldp     x20, x21, [sp, 16]
+        ldp     lr, x19, [sp], 32
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: in/out struct TetrominoState*
+ *      x1: in struct BoardState*
+ */
+move_tetromino_to_bottom:
+        stp     lr, x19, [sp, -48]!
+        stp     x20, x21, [sp, 16]
+        stp     x22, x23, [sp, 32]
+
+        mov     x20, x0                 // x20 <- tetromino state
+        mov     x21, x1                 // x21 <- board state
+
+        ldr     x22, [x20, TSTATE_POS_X]      // const x22 = tetromino x
+        ldr     x23, [x20, TSTATE_POS_Y]      // x23 = tetromino y
+
+move_tetromino_to_bottom__next_y:
+        mov     x0, x22
+        mov     x1, x23
+        mov     x2, x20
+        mov     x3, x21
+        bl      try_move_tetromino
+        sub     x23, x23, 1                             // Decrement y
+        cbnz    x0, move_tetromino_to_bottom__next_y    // If successful, try next y
+
+        ldp     x22, x23, [sp, 32]
+        ldp     x20, x21, [sp, 16]
+        ldp     lr, x19, [sp], 48
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: in/out struct GameState*    <- game state
+ */
+restart_game:
+        stp     lr, x19, [sp, -16]!
+
+        mov     x19, x0                 // x19 <- game_state
+
+        str     xzr, [x19, IS_PAUSED]
+
+        bl      get_time
+        str     w0, [x19, LAST_DROP]
+
+        add     x0, x19, TETROMINO_STATE
+        bl      init_tetromino_state
+
+        add     x0, x19, CHOOSER_BAG_STATE
+        bl      recreate_chooser_bag
+
+        add     x0, x19, CHOOSER_BAG_STATE
+        bl      choose_next_tetromino
+        stur    x0, [x19, TETROMINO_STATE + TSTATE_ID]  // Set first tetromino.
+
+        add	x0, x19, BOARD_STATE
+        bl	init_board_state
+
+        add 	x0, x19, GAME_STATS
+        bl 	init_game_stats
+
+        ldp     lr, x19, [sp], 16
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: in/out struct GameState*    <- game state
+ * Returns:
+ *      x0: bool                        <- true if gravity was successful, false otherwise
  */
 tetromino_fall:
         sub sp, sp, 64
@@ -1236,7 +1471,7 @@ tetromino_fall:
 
         ldr     x9, =US_PER_AUTO_DROP
         cmp     x0, x9                  // Check time to see if tetromino should fall
-        b.lt    tetromino_fall__end
+        b.lt    tetromino_fall__success
 
         stur    w1, [x19, LAST_DROP]    // update LAST_DROP with LAST ATTEMPTED DROP time.
 
@@ -1254,32 +1489,21 @@ tetromino_fall:
         add     x0, x19, TETROMINO_STATE
         add     x1, x19, BOARD_STATE
         bl      try_drop_tetromino
+        cbnz    x0, tetromino_fall__success
 
-        cbnz    x0, tetromino_fall__end
+        /* Tetromino can't move down, we need to place it */
 
         // Try to integrate tetromino with board, if not possible, then GAME OVER.
         add     x0, x19, TETROMINO_STATE
         add     x1, x19, BOARD_STATE
-        bl      try_place_tetromino
+        bl      try_place_tetromino_and_update
+        b       tetromino_fall__end     // Return result of call above
 
-        // Check full lines and update board matrix.
-        add     x0, x19, BOARD_STATE
-        add     x1, x19, (TETROMINO_STATE + TSTATE_POS_Y)
-        ldur    x1, [x1]                                  // x1 = posY of tetromino
-        bl      update_board
-
-        ldur    x1, [x19, GAME_STATS + GS_COMPLETED_ROWS]
-        add     x1, x0, x1                                   // Update completed rows
-        stur    x1, [x19, GAME_STATS + GS_COMPLETED_ROWS]
-
-        mov x0, 1
-        b tetromino_fall__fullend
+tetromino_fall__success:
+        mov     x0, 1
+        b       tetromino_fall__end
 
 tetromino_fall__end:
-        mov     x0, 0
-
-tetromino_fall__fullend:
-
         ldur    x25, [sp, 56]
         ldur    x24, [sp, 48]
         ldur    x23, [sp, 40]
@@ -1394,12 +1618,7 @@ try_place_tetromino:
         mov     x20, x1
 
         bl      check_collision
-        cbz    x0, try_place_tetromino__not_game_over  
-
-	sub		sp, x21, TETROMINO_STATE
-	b		game_over
-
-try_place_tetromino__not_game_over:	
+        cbnz    x0, try_place_tetromino__failure
 
         mov     x0, x21
         bl      get_tetromino
@@ -1441,15 +1660,22 @@ try_place_tetromino__next_cell:
         add     x4, x4, 1        // increase count per line.
 
         cmp     x0, x26
-        b.eq    try_place_tetromino__end  // If x0 reached the end, then game IS NOT over and BoardState IS Updated.
+        b.eq    try_place_tetromino__success  // If x0 reached the end, then game IS NOT over and BoardState IS Updated.
 
         cmp     x4, 4    // if tetromino matrix line is done, jump to next line.
         b.eq    try_place_tetromino__bigloop
 
         b       try_place_tetromino__loop
 
-try_place_tetromino__end:
+try_place_tetromino__success:
         mov     x0, 1
+        b       try_place_tetromino__end
+
+try_place_tetromino__failure:
+        mov     x0, 0
+        b       try_place_tetromino__end
+
+try_place_tetromino__end:
 
         ldur    x25, [sp, 56]
         ldur    x24, [sp, 48]
@@ -1460,6 +1686,55 @@ try_place_tetromino__end:
         ldur    x19, [sp, 8]
         ldur    lr, [sp]
         add     sp, sp, 64
+        ret
+
+
+
+/*
+ * Params:
+ *      x0: in struct TetrominoState*
+ *      x1: in/out struct BoardState*
+ * Returns:
+ *      x0: bool
+ */
+try_place_tetromino_and_update:
+        stp     lr, x19, [sp, -32]!
+        stp     x20, x21, [sp, 16]
+
+        mov     x20, x0         // x20 <- tetromino state
+        mov     x21, x1         // x21 <- board state
+
+        mov     x0, x20
+        mov     x1, x21
+        bl      try_place_tetromino
+        cbz     x0, try_place_tetromino_and_update__end // Return 0 if try_place failed
+
+        /* We successfully placed tetromino, so update the board and spawn a new one */
+
+        add     x0, x19, BOARD_STATE
+        add     x1, x19, (TETROMINO_STATE + TSTATE_POS_Y)
+        ldur    x1, [x1]                                // x1 = posY of tetromino
+        bl      update_board
+
+        ldur    x1, [x19, GAME_STATS + GS_COMPLETED_ROWS]
+        add     x1, x0, x1                              // Update completed rows
+        stur    x1, [x19, GAME_STATS + GS_COMPLETED_ROWS]
+
+        add     x0, x19, TETROMINO_STATE
+        bl      init_tetromino_state                    // Put tetromino at starting position
+
+        bl      get_time
+        str     w0, [x19, LAST_DROP]                    // Set now as last drop
+
+        add     x0, x19, CHOOSER_BAG_STATE
+        bl      choose_next_tetromino                   // Choose new tetromino
+        str     x0, [x19, TETROMINO_STATE + TSTATE_ID]  // Save new tetromino.
+
+        mov     x0, 1           // Return success
+
+try_place_tetromino_and_update__end:
+        ldp     x20, x21, [sp, 16]
+        ldp     lr, x19, [sp], 32
         ret
 
 
@@ -1700,6 +1975,9 @@ draw_circle_at:
         stp     x20, x21, [sp, 16]
         stp     x22, x23, [sp, 32]
 
+        cmp     x3, 0   // Early return if radius is non positive
+        b.le    draw_circle_at__end
+
         add     x19, x3, 1
         mul     x19, x3, x19     // x19 "=" r^2 === r*(r+1)
 
@@ -1743,7 +2021,7 @@ skip_circle_pixel:
         cmp     x21, x3
         b.le    circle_next_row
 
-
+draw_circle_at__end:
         ldp     x22, x23, [sp, 32]
         ldp     x20, x21, [sp, 16]
         ldp     lr, x19, [sp], 48
@@ -1764,6 +2042,17 @@ check_collision:
         stp     x22, x23, [sp, 32]
         stp     x24, x25, [sp, 48]
 
+        /*
+        sub sp, sp, 16
+        stur x0, [sp]
+        stur x1, [sp, 8]
+        bl check_player_left_edge
+        mov x25, x0
+        ldur x0, [sp]
+        ldur x1, [sp, 8]
+        add sp, sp, 16
+        cbnz x25, check_collision__badending
+        */
 
         mov     x25, x1
 
@@ -2394,6 +2683,21 @@ draw_number__next_digit:
         ldp     x20, x21, [sp, 16]
         ldp     lr, x19, [sp], 48
         ret
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 test_binary_to_decimal:
