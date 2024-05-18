@@ -16,4 +16,4 @@ The game IS resizeable and you can play in anything from a 4x4 board to a 50x50 
 
 https://github.com/achaval-tomas/ASM-Tetris/assets/134091945/cd0755b6-975a-4ee5-ac81-0244e5e74e99
 
-<ins>**Fun Fact:**</ins> Did you notice our names are **Tomas, Tomas and Tomas?** We handed in this assignment as **TTeTris** for that reason!
+Made by T++
